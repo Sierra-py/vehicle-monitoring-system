@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/raw/
+data/processed/
+models/artifacts/*.pt
+models/artifacts/*.pth
+node_modules/
+frontend/dist/
+.DS_Store
+*.log
