@@ -24,6 +24,7 @@ class Config(BaseSettings):
     yolo_epochs: int = 100
     yolo_imgsz: int = 640
     yolo_batch: int = 32
+    yolo_confidence_threshold: float = 0.5
 
     # --- Secrets ---
     # postgres_url: str = Field(...)
