@@ -1,10 +1,8 @@
-# scripts/inspect_misses.py
 from pathlib import Path
 from ultralytics import YOLO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from config.config import config
 
-CONF_THRESHOLD = config.yolo_confidence_threshold       # threshold for "counts as a real detection" in the miss calculation
 LOW_CONF_DISPLAY = 0.1                                  # show ALL predictions above this, even weak ones, for diagnosis
 IOU_MATCH_THRESHOLD = 0.5
 
@@ -50,7 +48,7 @@ def find_missed_detections(model_path, val_images_dir, val_labels_dir, output_di
         all_preds = [(box.xyxy[0].tolist(), float(box.conf[0])) for box in results[0].boxes]
 
         # "counted as found" only uses predictions above the real threshold
-        confident_preds = [p for p, c in all_preds if c >= CONF_THRESHOLD]
+        confident_preds = [p for p, c in all_preds if c >= config.yolo_confidence_threshold]
 
         missed = []
         for gt in gt_boxes:
@@ -67,7 +65,7 @@ def find_missed_detections(model_path, val_images_dir, val_labels_dir, output_di
 
             # ALL model predictions in green (even weak ones), labeled with confidence
             for box, conf in all_preds:
-                color = "green" if conf >= CONF_THRESHOLD else "yellow"
+                color = "green" if conf >= config.yolo_confidence_threshold else "yellow"
                 draw.rectangle(box, outline=color, width=2)
                 draw.text((box[0], max(0, box[1] - 12)), f"{conf:.2f}", fill=color)
 
@@ -75,11 +73,3 @@ def find_missed_detections(model_path, val_images_dir, val_labels_dir, output_di
 
     print(f"Images with at least one missed plate: {miss_count}")
     print(f"Saved to {output_dir}")
-
-if __name__ == "__main__":
-    find_missed_detections(
-        model_path=config.yolo100ep_best_weights,
-        val_images_dir=config.plate_dataset_dir / "val" / "images",
-        val_labels_dir=config.plate_dataset_dir / "val" / "labels",
-        output_dir=config.processed_data_dir / "missed_detections"
-    )

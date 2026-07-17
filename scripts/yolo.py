@@ -1,3 +1,4 @@
+"""Script to train the YOLO model."""
 import argparse
 from ultralytics import YOLO
 from config.config import config
