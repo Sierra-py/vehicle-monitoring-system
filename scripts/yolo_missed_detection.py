@@ -78,7 +78,7 @@ def find_missed_detections(model_path, val_images_dir, val_labels_dir, output_di
 
 if __name__ == "__main__":
     find_missed_detections(
-        model_path=config.yolo_runs_dir / "yolo_pretrained_100ep" / "weights" / "best.pt",
+        model_path=config.yolo100ep_best_weights,
         val_images_dir=config.plate_dataset_dir / "val" / "images",
         val_labels_dir=config.plate_dataset_dir / "val" / "labels",
         output_dir=config.processed_data_dir / "missed_detections"

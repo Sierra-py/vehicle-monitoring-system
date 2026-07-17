@@ -184,7 +184,7 @@ def run_inference_on_upload(model_path: Path, output_dir: Path):
 if __name__ == "__main__":
     # Batch mode (original behavior)
     run_inference_and_crop(
-        model_path=config.yolo_runs_dir / "yolo_pretrained_100ep" / "weights" / "best.pt",
+        model_path=config.yolo100ep_best_weights,
         source_dir=config.plate_dataset_dir / "test" / "images",  # or your own held-out images
         annotated_dir=config.processed_data_dir / "ocr_test_annotated",
         crops_dir=config.processed_data_dir / "ocr_test_crops"

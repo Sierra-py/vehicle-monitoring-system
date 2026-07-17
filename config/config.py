@@ -19,6 +19,7 @@ class Config(BaseSettings):
     yolo_dir: Path = models_dir / "yolo"
     yolo_pretrained_dir: Path = yolo_dir / "pretrained"
     yolo_runs_dir: Path = yolo_dir / "runs"
+    yolo100ep_best_weights: Path = yolo_runs_dir / "yolo_pretrained_100ep" / "weights" / "best.pt"
 
     yolo_model_variant: str = "yolo26n.pt"
     yolo_epochs: int = 100
