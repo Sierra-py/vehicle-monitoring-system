@@ -27,6 +27,12 @@ class Config(BaseSettings):
     yolo_batch: int = 32
     yolo_confidence_threshold: float = 0.5
 
+    # --- OCR (plate text recognition) ---
+    ocr_dir: Path = models_dir/ "ocr"
+    ocr_pretrained_dir: Path = ocr_dir / "pretrained"
+    ocr_languages: list[str] = ["en"]
+    ocr_use_gpu: bool = True
+
     # --- Secrets ---
     # postgres_url: str = Field(...)
     # redis_url: str = Field(default="redis://localhost:6379")
