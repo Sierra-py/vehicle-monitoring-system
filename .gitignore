@@ -13,3 +13,5 @@ frontend/dist/
 .DS_Store
 *.log
 *.pth
+*.onnx
+models/ocr/cct-s-v2-global-model/
