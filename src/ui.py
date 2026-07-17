@@ -2,8 +2,10 @@ from pathlib import Path
 from ultralytics import YOLO
 import tkinter as tk
 from tkinter import filedialog
+from PIL import Image, ImageTk
 from config.config import config
 from src.detection import crop_detections
+from src.ocr import recognize_plate
 
 
 def _show_crops_with_save(crops, annotated, img_stem: str, default_dir: Path):
@@ -110,3 +112,56 @@ def run_inference_on_upload(model_path: Path, output_dir: Path):
 
     _show_crops_with_save(crops, annotated, img_path.stem, output_dir)
 
+# ------------------------------------------------------------------------------
+
+def run_ocr_on_upload(ocr_model):
+    """
+    Opens a tkinter file dialog so the user can pick a single CROPPED plate image
+    (not a full frame — this expects the same kind of image crop_detections
+    produces), runs OCR on it, and displays the image alongside the predicted text.
+
+    Takes an already-loaded OCR model (from src.ocr.load_ocr_model()) rather than
+    loading it internally, since OCR model load is comparatively expensive and you'll
+    likely want to test several images in a row without reloading each time.
+
+    Runs locally only — tkinter needs a display, so this won't work headless/over SSH
+    without X forwarding.
+    """
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    file_path = filedialog.askopenfilename(
+        title="Select a cropped plate image for OCR",
+        filetypes=[("Images", "*.jpg *.jpeg *.png *.JPG *.JPEG *.PNG")],
+    )
+    root.destroy()
+
+    if not file_path:
+        print("No file selected.")
+        return
+
+    img_path = Path(file_path)
+    img = Image.open(img_path).convert("RGB")
+    predicted_text = recognize_plate(ocr_model, img)
+
+    window = tk.Tk()
+    window.title(f"OCR result — {img_path.name}")
+
+    DISPLAY_MAX_SIDE = 400
+    display_img = img.copy()
+    display_img.thumbnail((DISPLAY_MAX_SIDE, DISPLAY_MAX_SIDE))
+    photo = ImageTk.PhotoImage(display_img)
+    window._photo_ref = photo  # keep alive, same reason as in _show_crops_with_save
+
+    tk.Label(window, image=photo).pack(padx=10, pady=10)
+
+    result_text = predicted_text if predicted_text else "(no text detected)"
+    tk.Label(
+        window,
+        text=result_text,
+        font=("Segoe UI", 16, "bold"),
+        fg="black" if predicted_text else "gray",
+    ).pack(padx=10, pady=(0, 10))
+
+    window.mainloop()

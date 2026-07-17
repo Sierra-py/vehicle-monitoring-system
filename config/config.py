@@ -1,13 +1,13 @@
 from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings
-
 class Config(BaseSettings):
     # --- Base paths ---
     project_root: Path = Path(__file__).resolve().parent.parent
     data_dir: Path = project_root / "data"
     raw_data_dir: Path = data_dir / "raw"
     processed_data_dir: Path = data_dir / "processed"
+    cropped_img_dir: Path = processed_data_dir / "ocr_test_crops"
 
     # --- Dataset: plate detection ---
     plate_ndjson: Path = raw_data_dir / "plate.ndjson"
@@ -30,6 +30,7 @@ class Config(BaseSettings):
     # --- OCR (plate text recognition) ---
     ocr_dir: Path = models_dir/ "ocr"
     ocr_pretrained_dir: Path = ocr_dir / "pretrained"
+    ocr_model_name: str = "cct-s-v2-global-model"
     ocr_languages: list[str] = ["en"]
     ocr_use_gpu: bool = True
 

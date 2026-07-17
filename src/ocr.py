@@ -1,61 +1,82 @@
 from PIL import Image
 import numpy as np
-import easyocr
+from fast_plate_ocr import LicensePlateRecognizer
+from fast_plate_ocr.inference.hub import download_model
 
 from config.config import config
+
+# Plates wider than they are tall by this ratio are treated as a normal single-line
+# plate. Anything squarer/taller than this is assumed to be a stacked two-line plate
+# (common on Indian two-wheelers) and gets split before OCR. This is a heuristic based
+# on typical plate proportions, not a hard rule — tune it against your own dataset if
+# single-line plates are getting misclassified as two-line or vice versa.
+TWO_LINE_ASPECT_THRESHOLD = 2.2
 
 
 def load_ocr_model():
     """
-    Downloads the ocr model into the ocr/pretrained directory. Loads and returns an EasyOCR reader.
-    Reuse the returned reader across images — loading it is expensive, and doing
-    it per-image would repeat that cost for no benefit, same reasoning as loading the
-    YOLO model once in detection.py.
+    Loads and returns a fast-plate-ocr LicensePlateRecognizer. Call this once and
+    reuse it across images, same reasoning as loading the YOLO model once in
+    detection.py — the model load itself is the expensive part, not each prediction.
+
+    Unlike EasyOCR this is a model trained specifically on cropped license plates
+    rather than a general-purpose text reader, so it should be meaningfully more
+    accurate on plate character recognition specifically.
+
+    Weights are downloaded (on first run only) into config.ocr_dir rather than the
+    library's default ~/.cache/fast-plate-ocr, so model files stay inside the repo's
+    models/ directory alongside the YOLO weights.
     """
-    config.ocr_pretrained_dir.mkdir(parents=True, exist_ok=True)
-    return easyocr.Reader(
-        config.ocr_languages,
-        gpu= config.ocr_use_gpu,
-        model_storage_directory=str(config.ocr_pretrained_dir),
+    onnx_path, plate_config_path = download_model(
+        config.ocr_model_name,
+        save_directory=config.ocr_dir / config.ocr_model_name,
+    )
+    return LicensePlateRecognizer(
+        onnx_model_path=onnx_path,
+        plate_config_path=plate_config_path,
     )
 
 
-
-PLATE_ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-MIN_CONF_PER_LINE = 0.2       # discard low-confidence noise reads (stray marks, bolts, etc.)
-UPSCALE_MIN_HEIGHT_PX = 64    # crops shorter than this get upscaled before OCR
- 
+def _looks_two_line(img: Image.Image) -> bool:
+    return (img.width / img.height) < TWO_LINE_ASPECT_THRESHOLD
 
 
-def recognize_plate(reader, cropped_plate: Image.Image):
+def _split_two_line(img: Image.Image):
+    """
+    Naive top/bottom split down the vertical midpoint. Works when both rows are
+    roughly equal height, which covers most stacked-plate layouts, but will cut
+    into characters if the two rows are uneven — there's no line-detection here,
+    just a fixed 50/50 split.
+    """
+    mid = img.height // 2
+    top = img.crop((0, 0, img.width, mid))
+    bottom = img.crop((0, mid, img.width, img.height))
+    return top, bottom
+
+
+def recognize_plate(model: LicensePlateRecognizer, cropped_plate: Image.Image):
     """
     Runs OCR on a single cropped plate image (the kind returned by crop_detections
     in detection.py) and returns the best-guess plate text, or None if nothing
     readable was found.
- 
-    Handles two-line plates: EasyOCR returns one text region per detected line, so
-    instead of keeping only the single highest-confidence region (which silently
-    drops the second line on stacked plates), all regions above MIN_CONF_PER_LINE
-    are kept and joined in top-to-bottom reading order.
+
+    Plates that look like stacked two-line layouts (by aspect ratio) are split into
+    top/bottom halves and recognized separately, then joined — the underlying model
+    is single-line, so this handles the layout problem outside the model itself.
+
+    model.run() returns a list of PlatePrediction objects (even without
+    return_confidence=True) — the actual text is in .plate, not the object itself.
     """
-    img = cropped_plate
- 
-    # Small crops (typical once cropped tightly around just the plate) hurt OCR
-    # accuracy — upscale before reading if the crop is short.
-    if img.height < UPSCALE_MIN_HEIGHT_PX:
-        scale = UPSCALE_MIN_HEIGHT_PX / img.height
-        img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
- 
-    result = reader.readtext(np.array(img), allowlist=PLATE_ALLOWLIST)
+    if _looks_two_line(cropped_plate):
+        top, bottom = _split_two_line(cropped_plate)
+        top_result = model.run(np.array(top.convert("RGB")))
+        bottom_result = model.run(np.array(bottom.convert("RGB")))
+        top_text = top_result[0].plate if top_result else ""
+        bottom_text = bottom_result[0].plate if bottom_result else ""
+        combined = f"{top_text}{bottom_text}".strip()
+        return combined or None
+
+    result = model.run(np.array(cropped_plate.convert("RGB")))
     if not result:
         return None
- 
-    # Each item is (bbox, text, confidence). bbox is 4 corner points;
-    # bbox[0][1] is the top-left corner's y-coordinate, used to sort lines
-    # top-to-bottom rather than in whatever order EasyOCR happened to return them.
-    lines = [(bbox[0][1], text, conf) for bbox, text, conf in result if conf >= MIN_CONF_PER_LINE]
-    if not lines:
-        return None
- 
-    lines.sort(key=lambda l: l[0])
-    return "".join(text for _, text, _ in lines)
+    return result[0].plate

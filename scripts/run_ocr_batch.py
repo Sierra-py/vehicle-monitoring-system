@@ -3,6 +3,7 @@ from pathlib import Path
 from config.config import config
 from src.ocr import load_ocr_model, recognize_plate
 from PIL import Image
+import json
 
 
 def run_ocr_on_crops(crops_dir: Path):
@@ -21,4 +22,7 @@ def run_ocr_on_crops(crops_dir: Path):
 
 
 if __name__ == "__main__":
-    run_ocr_on_crops(config.processed_data_dir / "ocr_test_crops")
+    result = run_ocr_on_crops(config.processed_data_dir / "ocr_test_crops")
+
+    with open("plate_text.json", "w") as f:
+        json.dump(result, f, indent=4)
