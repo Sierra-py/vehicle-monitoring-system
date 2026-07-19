@@ -22,7 +22,7 @@ def run_ocr_on_crops(crops_dir: Path):
 
 
 if __name__ == "__main__":
-    result = run_ocr_on_crops(config.processed_data_dir / "ocr_test_crops")
-
-    with open("plate_text.json", "w") as f:
+    result = run_ocr_on_crops(config.raw_data_dir / "Indian_LPR" / "images")
+    output_path = config.raw_data_dir / "Indian_LPR" / "extracted_ocr_text.json"
+    with open(output_path, "w") as f:
         json.dump(result, f, indent=4)

@@ -1,6 +1,7 @@
 from pathlib import Path
 from ultralytics import YOLO
 import tkinter as tk
+import csv
 from tkinter import filedialog
 from PIL import Image, ImageTk
 from config.config import config
@@ -164,4 +165,122 @@ def run_ocr_on_upload(ocr_model):
         fg="black" if predicted_text else "gray",
     ).pack(padx=10, pady=(0, 10))
 
+    window.mainloop()
+
+# ------------------------------------------------------------------------------
+
+def label_ocr_predictions(ocr_model, crops_dir: Path, output_csv: Path):
+    """
+    Fast correction-labeling UI for building an OCR ground-truth dataset. Shows each
+    crop with the model's predicted text pre-filled and pre-selected in an editable
+    box — press Enter to accept as-is, or just start typing to overwrite it if the
+    prediction is wrong. This keeps labeling fast: correct predictions cost one
+    keypress, wrong ones cost only as much typing as the correction itself, never a
+    full plate typed from a blank field.
+ 
+    Resumes automatically: filenames already present in output_csv are skipped, so
+    labeling can be done across multiple sessions without redoing work. Safe to call
+    against a different crops_dir / output_csv pair each time — nothing here assumes
+    a single fixed dataset, so this can be rerun as new data folders come in.
+    """
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+ 
+    crop_paths = sorted(list(crops_dir.glob("*.jpg")) + list(crops_dir.glob("*.png")))
+    if not crop_paths:
+        print(f"No images found in {crops_dir}")
+        return
+ 
+    labeled = set()
+    if output_csv.exists():
+        with open(output_csv, newline="") as f:
+            labeled = {row["filename"] for row in csv.DictReader(f)}
+ 
+    remaining = [p for p in crop_paths if p.name not in labeled]
+    print(f"{len(labeled)} already labeled, {len(remaining)} remaining in {crops_dir.name}")
+ 
+    if not remaining:
+        print("Nothing left to label.")
+        return
+ 
+    write_header = not output_csv.exists()
+    csv_file = open(output_csv, "a", newline="")
+    writer = csv.writer(csv_file)
+    if write_header:
+        writer.writerow(["filename", "predicted_text", "corrected_text", "was_correct"])
+ 
+    state = {"index": 0}
+ 
+    window = tk.Tk()
+    window.title(f"OCR labeling — {crops_dir.name}")
+ 
+    img_label = tk.Label(window)
+    img_label.pack(padx=10, pady=10)
+ 
+    progress_label = tk.Label(window, font=("Segoe UI", 9), fg="gray")
+    progress_label.pack()
+ 
+    text_var = tk.StringVar()
+    entry = tk.Entry(window, textvariable=text_var, font=("Segoe UI", 18), justify="center", width=20)
+    entry.pack(padx=10, pady=10)
+    entry.focus()
+ 
+    window._photo_ref = None  # keep alive, same reason as elsewhere in this module
+ 
+    def load_current():
+        i = state["index"]
+        if i >= len(remaining):
+            csv_file.close()
+            window.destroy()
+            print(f"All done. Labels saved to {output_csv}")
+            return
+ 
+        path = remaining[i]
+        img = Image.open(path).convert("RGB")
+        predicted = recognize_plate(ocr_model, img) or ""
+ 
+        state["current_path"] = path
+        state["current_predicted"] = predicted
+ 
+        display_img = img.copy()
+        display_img.thumbnail((400, 400))
+        photo = ImageTk.PhotoImage(display_img)
+        window._photo_ref = photo
+        img_label.configure(image=photo)
+ 
+        text_var.set(predicted)
+        entry.select_range(0, tk.END)
+        progress_label.configure(text=f"{i + 1} / {len(remaining)}  —  {path.name}")
+ 
+    def submit(event=None):
+        path = state["current_path"]
+        predicted = state["current_predicted"]
+        corrected = text_var.get().strip()
+        was_correct = (corrected == predicted)
+ 
+        writer.writerow([path.name, predicted, corrected, was_correct])
+        csv_file.flush()
+ 
+        state["index"] += 1
+        load_current()
+ 
+    def skip(event=None):
+        # For genuinely unreadable/garbage crops — marked explicitly rather than
+        # silently dropped, so the resume logic still treats it as handled.
+        path = state["current_path"]
+        writer.writerow([path.name, state["current_predicted"], "UNREADABLE", False])
+        csv_file.flush()
+        state["index"] += 1
+        load_current()
+ 
+    entry.bind("<Return>", submit)
+    window.bind("<Escape>", skip)
+ 
+    hint = tk.Label(
+        window,
+        text="Enter = accept/save text shown  |  Esc = mark unreadable/skip",
+        font=("Segoe UI", 9), fg="gray"
+    )
+    hint.pack(pady=(0, 10))
+ 
+    load_current()
     window.mainloop()
