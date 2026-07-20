@@ -34,6 +34,15 @@ class Config(BaseSettings):
     ocr_languages: list[str] = ["en"]
     ocr_use_gpu: bool = True
 
+    ocr_finetune_base_weights: Path = ocr_pretrained_dir / ocr_model_name /"cct_s_v2_global.keras"
+    ocr_finetune_model_config: Path = ocr_pretrained_dir / ocr_model_name /"cct_s_v2_global_model_config.yaml"
+    ocr_finetune_plate_config: Path = ocr_pretrained_dir / ocr_model_name/ "cct_s_v2_global_plate_config.yaml"
+    ocr_finetune_dataset_dir: Path = processed_data_dir / "ocr_finetune_dataset"
+    ocr_finetune_output_dir: Path = ocr_dir / "finetuned"
+    ocr_finetune_epochs: int = 30
+    ocr_finetune_batch_size: int = 32
+
+
     # --- Secrets ---
     # postgres_url: str = Field(...)
     # redis_url: str = Field(default="redis://localhost:6379")

@@ -29,7 +29,7 @@ def load_ocr_model():
     """
     onnx_path, plate_config_path = download_model(
         config.ocr_model_name,
-        save_directory=config.ocr_dir / config.ocr_model_name,
+        save_directory=config.ocr_pretrained_dir / config.ocr_model_name,
     )
     return LicensePlateRecognizer(
         onnx_model_path=onnx_path,
