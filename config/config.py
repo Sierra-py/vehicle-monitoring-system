@@ -41,6 +41,7 @@ class Config(BaseSettings):
     ocr_finetune_output_dir: Path = ocr_dir / "finetuned"
     ocr_finetune_epochs: int = 30
     ocr_finetune_batch_size: int = 32
+    ocr_finetuned_model_onnx: Path = ocr_dir / "finetuned" / "best.onnx"
 
 
     # --- Secrets ---

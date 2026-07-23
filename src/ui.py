@@ -2,12 +2,15 @@ from pathlib import Path
 from ultralytics import YOLO
 import tkinter as tk
 import csv
+import numpy as np
 from tkinter import filedialog
 from PIL import Image, ImageTk
 from config.config import config
 from src.detection import crop_detections
 from src.ocr import recognize_plate
 
+
+# ----------------------------------YOLO----------------------------------------
 
 def _show_crops_with_save(crops, annotated, img_stem: str, default_dir: Path):
     """
@@ -115,15 +118,20 @@ def run_inference_on_upload(model_path: Path, output_dir: Path):
 
 # ------------------------------------------------------------------------------
 
-def run_ocr_on_upload(ocr_model):
+# ----------------------------------OCR-----------------------------------------
+
+def run_ocr_on_upload(single_line_model, two_line_model):
     """
     Opens a tkinter file dialog so the user can pick a single CROPPED plate image
     (not a full frame — this expects the same kind of image crop_detections
     produces), runs OCR on it, and displays the image alongside the predicted text.
 
-    Takes an already-loaded OCR model (from src.ocr.load_ocr_model()) rather than
-    loading it internally, since OCR model load is comparatively expensive and you'll
-    likely want to test several images in a row without reloading each time.
+    Takes two already-loaded OCR models — single_line_model (fine-tuned, from
+    src.ocr.load_finetuned_ocr_model()) and two_line_model (base pretrained, from
+    src.ocr.load_ocr_model()) — matching recognize_plate()'s signature. Loaded
+    externally rather than internally since OCR model load is comparatively
+    expensive and you'll likely want to test several images in a row without
+    reloading each time.
 
     Runs locally only — tkinter needs a display, so this won't work headless/over SSH
     without X forwarding.
@@ -144,7 +152,7 @@ def run_ocr_on_upload(ocr_model):
 
     img_path = Path(file_path)
     img = Image.open(img_path).convert("RGB")
-    predicted_text = recognize_plate(ocr_model, img)
+    predicted_text = recognize_plate(single_line_model, two_line_model, img)
 
     window = tk.Tk()
     window.title(f"OCR result — {img_path.name}")
@@ -175,9 +183,17 @@ def label_ocr_predictions(ocr_model, crops_dir: Path, output_csv: Path):
     crop with the model's predicted text pre-filled and pre-selected in an editable
     box — press Enter to accept as-is, or just start typing to overwrite it if the
     prediction is wrong. This keeps labeling fast: correct predictions cost one
-    keypress, wrong ones cost only as much typing as the correction itself, never a
-    full plate typed from a blank field.
- 
+    keypress, wrong ones cost only as much typing as the correction itself.
+
+    Takes a single ocr_model, not the (single_line_model, two_line_model) pair
+    recognize_plate() expects in production — this tool only needs a draft
+    prediction to correct, not the real two-line split-and-route behavior, so it
+    calls the model directly rather than through recognize_plate(). Pass whichever
+    model's predictions you want as your starting draft: the base pretrained model
+    (load_ocr_model()) if labeling fresh data with no fine-tune yet, or the
+    fine-tuned model (load_finetuned_ocr_model()) for a later batch, once one
+    exists, to get better starting drafts and less typing.
+
     Resumes automatically: filenames already present in output_csv are skipped, so
     labeling can be done across multiple sessions without redoing work. Safe to call
     against a different crops_dir / output_csv pair each time — nothing here assumes
@@ -196,12 +212,13 @@ def label_ocr_predictions(ocr_model, crops_dir: Path, output_csv: Path):
             labeled = {row["filename"] for row in csv.DictReader(f)}
  
     remaining = [p for p in crop_paths if p.name not in labeled]
-    print(f"{len(labeled)} already labeled, {len(remaining)} remaining in {crops_dir.name}")
- 
+
     if not remaining:
         print("Nothing left to label.")
         return
- 
+    
+    print(f"{len(labeled)} already labeled, {len(remaining)} remaining in {crops_dir.name}")
+  
     write_header = not output_csv.exists()
     csv_file = open(output_csv, "a", newline="")
     writer = csv.writer(csv_file)
@@ -236,7 +253,8 @@ def label_ocr_predictions(ocr_model, crops_dir: Path, output_csv: Path):
  
         path = remaining[i]
         img = Image.open(path).convert("RGB")
-        predicted = recognize_plate(ocr_model, img) or ""
+        result = ocr_model.run(np.array(img))
+        predicted = (result[0].plate if result else "") or ""
  
         state["current_path"] = path
         state["current_predicted"] = predicted

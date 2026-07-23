@@ -16,3 +16,4 @@ frontend/dist/
 *.onnx
 *.keras
 models/ocr/cct-s-v2-global-model/
+tmp/
