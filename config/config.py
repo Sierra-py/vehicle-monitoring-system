@@ -7,6 +7,7 @@ class Config(BaseSettings):
     data_dir: Path = project_root / "data"
     raw_data_dir: Path = data_dir / "raw"
     processed_data_dir: Path = data_dir / "processed"
+    simulation_data_dir: Path = data_dir / "simulation"
     cropped_img_dir: Path = processed_data_dir / "ocr_test_crops"
 
     # --- Dataset: plate detection ---
@@ -25,7 +26,7 @@ class Config(BaseSettings):
     yolo_epochs: int = 100
     yolo_imgsz: int = 640
     yolo_batch: int = 32
-    yolo_confidence_threshold: float = 0.5
+    yolo_confidence_threshold: float = 0.3
 
     # --- OCR (plate text recognition) ---
     ocr_dir: Path = models_dir/ "ocr"
