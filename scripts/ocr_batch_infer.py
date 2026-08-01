@@ -1,7 +1,7 @@
 """Run OCR over a folder of cropped plate images (e.g. output of batch_infer.py)."""
 from pathlib import Path
 from config.config import config
-from src.ocr import load_ocr_model, load_finetuned_ocr_model, recognize_plate
+from src.ocr import load_ocr_model, load_finetuned_ocr_model, recognize_plate_with_validation
 from PIL import Image
 import json
 import argparse
@@ -16,12 +16,17 @@ def run_ocr_on_crops(crops_dir: Path, use_finetuned: bool = False):
     print(f"Running OCR on {len(crop_paths)} cropped plates")
 
     results = {}
+    flagged_count = 0
     for crop_path in crop_paths:
         img = Image.open(crop_path).convert("RGB")
-        text = recognize_plate(single_line_model, two_line_model, img)
-        results[crop_path.name] = text
-        print(f"{crop_path.name}: {text}")
+        outcome = recognize_plate_with_validation(single_line_model, two_line_model, img)
+        results[crop_path.name] = outcome
+        if not outcome["is_valid"]:
+            flagged_count += 1
+        status = "OK" if outcome["is_valid"] else f"FLAGGED ({outcome['reason']})"
+        print(f"{crop_path.name}: {outcome['text']}  [{status}]")
 
+    print(f"\n{flagged_count} / {len(crop_paths)} flagged for review")
     return results
 
 def main():
