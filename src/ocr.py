@@ -59,8 +59,6 @@ def load_finetuned_ocr_model():
         plate_config_path=config.ocr_finetune_plate_config,
     )
  
-
-
 def _looks_two_line(img: Image.Image) -> bool:
     return (img.width / img.height) < TWO_LINE_ASPECT_THRESHOLD
 

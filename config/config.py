@@ -51,9 +51,18 @@ class Config(BaseSettings):
     ocr_min_avg_char_confidence: float = 0.5  # below this, don't trust the prediction enough to auto-log it
 
 
+ 
+    # --- Kafka ---
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_topic_detections: str = "vehicle.detections"
+    kafka_topic_ocr_results: str = "vehicle.ocr_results"
+ 
     # --- Secrets ---
-    # postgres_url: str = Field(...)
+    # Defaulted (not required) so existing scripts that don't touch Postgres/Kafka
+    # keep working without a .env file present. Override via .env for real runs.
+    postgres_url: str = "postgresql://postgres:devpassword@localhost:5432/vehicle_monitoring"
     # redis_url: str = Field(default="redis://localhost:6379")
+ 
 
     class Config:
         env_file = ".env"
