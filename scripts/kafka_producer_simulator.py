@@ -36,6 +36,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from kafka.errors import NoBrokersAvailable, KafkaError
 from kafka import KafkaProducer
 from ultralytics import YOLO
 
@@ -49,11 +50,23 @@ from src.detection import crop_detections
 CAPTURES_DIR = config.data_dir / "captures"
 
 
-def build_producer() -> KafkaProducer:
-    return KafkaProducer(
-        bootstrap_servers=config.kafka_bootstrap_servers,
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    )
+def build_producer(retries: int = 5, delay_seconds: float = 3.0) -> KafkaProducer:
+    last_error = None
+    for attempt in range(1, retries+1):
+        try:
+            return KafkaProducer(
+                bootstrap_servers=config.kafka_bootstrap_servers,
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            )
+        except (NoBrokersAvailable, KafkaError, ValueError) as e:
+            last_error = e
+            print(f"[startup] Producer connection attempt {attempt}/{retries} failed: {e!r}")
+            time.sleep(delay_seconds)
+    raise RuntimeError(
+        f"Could not connect Producer to Kafka after {retries} attempts. "
+        f"Last error: {last_error!r}."
+    ) from last_error
+
 
 
 def iter_source_images():
