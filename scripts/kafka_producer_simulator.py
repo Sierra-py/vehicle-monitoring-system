@@ -139,7 +139,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simulated camera producer")
     parser.add_argument("--interval-seconds", type=float, default=2.0,
                          help="Delay between simulated frame arrivals")
-    parser.add_argument("--loop", action="store_true", default=False,
+    parser.add_argument("--loop", action="store_true",
                          help="Keep cycling through the simulation pool instead of stopping after one pass")
     args = parser.parse_args()
 
