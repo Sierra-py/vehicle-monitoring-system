@@ -87,45 +87,60 @@ def upsert_vehicle_state(session, plate_text: str, new_state: str, event_id: uui
 
 def process_message(detection: dict, whitelist: list[str]):
     plate_text = detection.get("plate_text") or None
+    ocr_is_valid = detection.get("ocr_is_valid", True)  # default True for older/malformed messages, don't silently block on a missing key
 
-    match_result = match_plate(plate_text, whitelist) if plate_text else None
+    # A low-confidence or too-short OCR read (ocr_is_valid=False, set by
+    # validate_ocr_result() in src/ocr.py) is NOT trustworthy enough to act
+    # on as an identity. Still log it to vehicle_events for the record, but
+    # do not run it through whitelist matching or the state machine, and
+    # never let it touch vehicle_state -- a garbage read should not flip
+    # someone's inside/outside status or spawn a bogus tracked "vehicle".
+    #
+    # This does NOT catch a confidently WRONG read (OCR sure of itself but
+    # misreading a character) -- confidence measures the model's certainty,
+    # not correctness, and there's no cheap fix for that half of the
+    # problem. This only removes the cheap, detectable failure mode.
+    if not ocr_is_valid:
+        match_result = None
+        state_key = None
+        transition = apply_transition(None, detection["claimed_direction"])
+        # Force state_after back to state_before -- we are NOT committing
+        # this transition (state_key is None so upsert_vehicle_state is
+        # skipped below regardless), this just keeps the logged row
+        # internally consistent rather than claiming a transition happened.
+        transition.state_after = transition.state_before
+        transition.transition_valid = False
+        requires_review = True
+        review_reason = (f"OCR read rejected before whitelist/state processing: "
+                          f"{detection.get('ocr_reason', 'invalid OCR result')}.")
+    else:
+        match_result = match_plate(plate_text, whitelist) if plate_text else None
 
     with get_session() as session:
-        current_state = get_current_state(session, match_result.whitelist_match if match_result else None)
-        # State machine keys off the WHITELIST plate (canonical identity),
-        # not the raw OCR text -- a fuzzy-matched plate should accumulate
-        # state under its real identity, not under every OCR variant that
-        # happens to fuzzy-match to it. If there's no whitelist match at
-        # all, fall back to tracking state under the raw OCR text so
-        # unrecognized vehicles still get logged consistently.
-        state_key = (match_result.whitelist_match if match_result and match_result.whitelist_match
-                     else plate_text)
-        current_state = get_current_state(session, state_key)
+        if ocr_is_valid:
+            # State machine keys off the WHITELIST plate (canonical identity),
+            # not the raw OCR text -- a fuzzy-matched plate should accumulate
+            # state under its real identity, not under every OCR variant that
+            # happens to fuzzy-match to it. If there's no whitelist match at
+            # all, fall back to tracking state under the raw OCR text so
+            # unrecognized vehicles still get logged consistently.
+            state_key = (match_result.whitelist_match if match_result and match_result.whitelist_match
+                         else plate_text)
+            current_state = get_current_state(session, state_key)
 
-        transition = apply_transition(current_state, detection["claimed_direction"])
+            transition = apply_transition(current_state, detection["claimed_direction"])
 
-        requires_review = bool(
-            (match_result.requires_review if match_result else False)
-            or transition.requires_review
-        )
-        review_reasons = [
-            r for r in [
-                match_result.review_reason if match_result else None,
-                transition.review_reason,
-            ] if r
-        ]
-        review_reason = " | ".join(review_reasons) if review_reasons else None
-
-        event_id = uuid.UUID(detection["event_id"])
-
-        existing_event = session.execute(
-            select(VehicleEvent).where(VehicleEvent.event_id == event_id)
-        ).scalar_one_or_none()
-
-        if existing_event:
-            print(f"Duplicate event {event_id}, skipping.")
-            return existing_event, existing_event.requires_review
-
+            requires_review = bool(
+                (match_result.requires_review if match_result else False)
+                or transition.requires_review
+            )
+            review_reasons = [
+                r for r in [
+                    match_result.review_reason if match_result else None,
+                    transition.review_reason,
+                ] if r
+            ]
+            review_reason = " | ".join(review_reasons) if review_reasons else None
 
         event = VehicleEvent(
             event_id=uuid.UUID(detection["event_id"]),
@@ -169,6 +184,26 @@ def run_consumer():
 
     print(f"Listening on '{config.kafka_topic_ocr_results}', writing to Postgres.\n")
 
+    # Same cold-start poll-cycle crash as scripts/kafka_consumer_ocr.py --
+    # ValueError: Invalid file descriptor: -1, raised inside the FIRST poll
+    # cycle for a brand-new consumer group, not during connection (which is
+    # why build_consumer()'s own retry doesn't catch it). Wrapping the
+    # message loop itself the same way Stage 1 does, so a fresh consumer
+    # group on this topic doesn't hit an unhandled crash on first run.
+    max_loop_restarts = 2
+    for loop_attempt in range(1, max_loop_restarts + 1):
+        try:
+            _consume_loop(consumer, whitelist)
+            break
+        except ValueError as e:
+            if "Invalid file descriptor" not in str(e) or loop_attempt == max_loop_restarts:
+                raise
+            print(f"[startup] known first-run coordinator race hit ({e!r}), "
+                  f"reconnecting (attempt {loop_attempt}/{max_loop_restarts})...")
+            consumer = build_consumer()
+
+
+def _consume_loop(consumer, whitelist):
     for message in consumer:
         detection = message.value
         event, requires_review = process_message(detection, whitelist)
