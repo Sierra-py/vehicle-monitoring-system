@@ -55,6 +55,16 @@ class VehicleEvent(Base):
     requires_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     review_reason: Mapped[str | None] = mapped_column(String)
 
+    # Human review resolution -- separate from requires_review (which the
+    # pipeline sets automatically) so "flagged" and "resolved" are two
+    # independent facts. Approving/rejecting NEVER touches vehicle_state
+    # retroactively -- review is a record-keeping action on the event log
+    # only, so current occupancy state always reflects what the automated
+    # pipeline decided at the time, not a later human correction.
+    review_status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewer_note: Mapped[str | None] = mapped_column(String)
+
     created_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -62,8 +72,10 @@ class VehicleEvent(Base):
         CheckConstraint("match_type IN ('exact', 'fuzzy', 'ambiguous', 'no_match')", name="ck_match_type"),
         CheckConstraint("vehicle_state_before IN ('inside', 'outside')", name="ck_state_before"),
         CheckConstraint("vehicle_state_after IN ('inside', 'outside')", name="ck_state_after"),
+        CheckConstraint("review_status IN ('pending', 'approved', 'rejected')", name="ck_review_status"),
         Index("idx_vehicle_events_plate", "plate_text"),
         Index("idx_vehicle_events_timestamp", "event_timestamp"),
+        Index("idx_vehicle_events_requires_review", "requires_review"),
     )
 
 

@@ -117,6 +117,21 @@ def process_message(detection: dict, whitelist: list[str]):
         match_result = match_plate(plate_text, whitelist) if plate_text else None
 
     with get_session() as session:
+        # Kafka is at-least-once delivery -- if this consumer crashes or
+        # restarts before its offset commits for a message, that message
+        # gets redelivered on restart. event_id is the natural idempotency
+        # key (generated once per detection by the producer), so check for
+        # an existing row FIRST, before any whitelist/state-machine work
+        # runs, not just before the final insert -- a replayed message
+        # should be a clean no-op, not a wasted (or accidentally
+        # state-mutating) reprocessing pass.
+        existing = session.execute(
+            select(VehicleEvent).where(VehicleEvent.event_id == uuid.UUID(detection["event_id"]))
+        ).scalar_one_or_none()
+        if existing is not None:
+            print(f"[dedup] {detection['event_id'][:8]}: already processed, skipping replay")
+            return existing, existing.requires_review
+
         if ocr_is_valid:
             # State machine keys off the WHITELIST plate (canonical identity),
             # not the raw OCR text -- a fuzzy-matched plate should accumulate
