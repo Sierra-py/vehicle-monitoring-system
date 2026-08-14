@@ -1,0 +1,32 @@
+# Dev-only dependencies -- training, labeling, evaluation, and notebook work.
+# NOT needed to run the deployed system (API + consumers) -- see
+# requirements.txt for that. Install this on top of requirements.txt in a
+# local dev environment:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Rejected/unused dependency deliberately NOT listed here: easyocr. It was
+# evaluated early in the project and rejected in favor of fast-plate-ocr
+# (see ocr.md) -- it is not imported anywhere in this codebase and doesn't
+# need to be installed at all.
+
+-r requirements.txt
+
+# --- OCR fine-tuning (scripts/ocr_finetune.py wraps the fast-plate-ocr
+# training CLI, which needs a Keras 3 + TensorFlow backend) ---
+tensorflow==2.21.0
+keras==3.15.0
+
+# --- Manual labeling GUI (src/ui.py, scripts/label_ocr_data.py) ---
+# tkinter itself ships with the Python standard library on most platforms
+# and isn't pip-installable -- if `import tkinter` fails, that's a system
+# package (e.g. `apt install python3-tk`), not something this file can fix.
+
+# --- Dataset dedup / image handling for labeling and eval ---
+opencv-python-headless==5.0.0.93
+
+# --- Detection/OCR evaluation, notebooks ---
+pandas==3.0.3
+matplotlib==3.11.0
+scikit-learn==1.9.0
+scikit-image==0.26.0
+ipykernel==7.3.0
