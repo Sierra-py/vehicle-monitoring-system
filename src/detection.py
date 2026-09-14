@@ -31,7 +31,8 @@ def _dedupe_overlapping_boxes(boxes_with_conf, overlap_threshold=config.yolo_ded
     when they're very different sizes — see _overlap_coefficient. This pass greedily
     keeps the highest-confidence box in each overlapping cluster and discards the rest.
 
-    boxes_with_conf: list of (box_xyxy, conf) tuples. Returns the same shape, deduped.
+    boxes_with_conf: list of (box_xyxy, conf) tuples. 
+    Returns the same shape, deduped.
     """
     sorted_boxes = sorted(boxes_with_conf, key=lambda bc: bc[1], reverse=True)
     kept = []
@@ -124,15 +125,23 @@ def crop_detections(
 # ---------------------------------------------------------------------------
 
 def run_inference_and_crop(model_path: Path, source_dir: Path, annotated_dir: Path, crops_dir: Path):
-    model = YOLO(str(model_path))
+    """Runs inferenceo YOLO model on images in source_dir, 
+    and saves annotated as well as cropped images in respectivey folder."""
 
+    # load yolo model
+    model = YOLO(str(model_path)) 
+
+    # Create directories if they don't exist to save images
     annotated_dir.mkdir(parents=True, exist_ok=True)
     crops_dir.mkdir(parents=True, exist_ok=True)
 
+    # Create a list of all the images in the source_dir
     image_paths = list(source_dir.glob("*.jpg")) + list(source_dir.glob("*.png"))
     print(f"Running inference on {len(image_paths)} images")
 
+    # run loop on every image in the list
     for img_path in image_paths:
+
         crops, annotated = crop_detections(model, img_path)
 
         annotated.save(annotated_dir / f"{img_path.stem}_annotated.jpg")

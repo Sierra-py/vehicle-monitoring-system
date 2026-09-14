@@ -33,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run OCR inference in batch of images.")
     parser.add_argument("--input", type=str, default=config.processed_data_dir / "Indian_LPR_deduped",
                          help="Path to folder of cropped plate images. Opens a folder-picker dialog if omitted.")
-    parser.add_argument("--output", type=str, default="extracted_ocr_text",
+    parser.add_argument("--output", type=str, default=str(config.processed_data_dir / "extracted_ocr_text"),
                          help="Path to save the json file of this batch.")
     parser.add_argument("--use_finetuned", type=str, default=True,
                         help = "Use the pretrained model for single line plates")

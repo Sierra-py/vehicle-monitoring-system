@@ -5,7 +5,7 @@ services:
     image: apache/kafka:latest
     container_name: vms_kafka
     ports:
-      - "9092:9092"    # This is what your Python producer/consumers connect to
+      - "9092:9092"    # This is what Python producer/consumers connect to
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller

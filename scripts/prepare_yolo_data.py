@@ -1,4 +1,4 @@
-"""Script to download data from plate ndjson file"""
+"""Script to download dataset from plate ndjson file"""
 import json
 import requests
 from pathlib import Path
